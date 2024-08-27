@@ -638,6 +638,7 @@ impl super::Device {
             view_formats: wgt_view_formats,
             surface_semaphores,
             next_semaphore_index: 0,
+            next_present_time: None,
         })
     }
 
