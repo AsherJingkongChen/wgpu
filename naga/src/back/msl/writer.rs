@@ -31,6 +31,7 @@ const RAY_QUERY_FIELD_INTERSECTION: &str = "intersection";
 const RAY_QUERY_FIELD_READY: &str = "ready";
 const RAY_QUERY_FUN_MAP_INTERSECTION: &str = "_map_intersection_type";
 
+pub(crate) const ATOMIC_COMP_EXCH_WEAK_FUNCTION_KEY: &str = "naga_atomic_compare_exchange_weak";
 pub(crate) const MODF_FUNCTION: &str = "naga_modf";
 pub(crate) const FREXP_FUNCTION: &str = "naga_frexp";
 
@@ -3082,23 +3083,60 @@ impl<W: Write> Writer<W> {
                     value,
                     result,
                 } => {
+                    let context = &context.expression;
+
                     // This backend supports `SHADER_INT64_ATOMIC_MIN_MAX` but not
                     // `SHADER_INT64_ATOMIC_ALL_OPS`, so we can assume that if `result` is
                     // `Some`, we are not operating on a 64-bit value, and that if we are
                     // operating on a 64-bit value, `result` is `None`.
                     write!(self.out, "{level}")?;
-                    let fun_str = if let Some(result) = result {
+                    let fun_key = if let Some(result) = result {
                         let res_name = Baked(result).to_string();
-                        self.start_baking_expression(result, &context.expression, &res_name)?;
+                        self.start_baking_expression(result, context, &res_name)?;
                         self.named_expressions.insert(result, res_name);
                         fun.to_msl()?
-                    } else if context.expression.resolve_type(value).scalar_width() == Some(8) {
+                    } else if context.resolve_type(value).scalar_width() == Some(8) {
                         fun.to_msl_64_bit()?
                     } else {
                         fun.to_msl()?
                     };
 
-                    self.put_atomic_operation(pointer, fun_str, value, &context.expression)?;
+                    // If the pointer we're passing to the atomic operation needs to be conditional
+                    // for `ReadZeroSkipWrite`, the condition needs to *surround* the atomic op, and
+                    // the pointer operand should be unchecked.
+                    let policy = context.choose_bounds_check_policy(pointer);
+                    let checked = policy == index::BoundsCheckPolicy::ReadZeroSkipWrite
+                        && self.put_bounds_checks(pointer, context, back::Level(0), "")?;
+
+                    // If requested and successfully put bounds checks, continue the ternary expression.
+                    if checked {
+                        write!(self.out, " ? ")?;
+                    }
+
+                    write!(
+                        self.out,
+                        "{NAMESPACE}::atomic_{fun_key}_explicit({ATOMIC_REFERENCE}"
+                    )?;
+                    self.put_access_chain(pointer, policy, context)?;
+                    write!(self.out, ", ")?;
+
+                    // Put the extra value if provided.
+                    if let crate::AtomicFunction::Exchange { compare: Some(cmp) } = *fun {
+                        write!(self.out, "{ATOMIC_REFERENCE}")?;
+                        self.put_expression(cmp, context, true)?;
+                        write!(self.out, ", ")?;
+                        self.put_expression(value, context, true)?;
+                        write!(self.out, ")")?;
+                    } else {
+                        self.put_expression(value, context, true)?;
+                        write!(self.out, ", {NAMESPACE}::memory_order_relaxed)")?;
+                    }
+
+                    // Finish the ternary expression.
+                    if checked {
+                        write!(self.out, " : DefaultConstructible()")?;
+                    }
+
                     // done
                     writeln!(self.out, ";")?;
                 }
@@ -3727,7 +3765,40 @@ impl<W: Write> Writer<W> {
                         struct_name, struct_name
                     )?;
                 }
-                &crate::PredeclaredType::AtomicCompareExchangeWeakResult { .. } => {}
+                &crate::PredeclaredType::AtomicCompareExchangeWeakResult(scalar) => {
+                    let called_func_name = "atomic_compare_exchange_weak_explicit";
+                    let defined_func_key = ATOMIC_COMP_EXCH_WEAK_FUNCTION_KEY;
+                    let struct_name = &self.names[&NameKey::Type(*struct_ty)];
+
+                    writeln!(self.out)?;
+
+                    for address_space_name in ["device", "threadgroup"] {
+                        writeln!(
+                            self.out,
+                            "namespace {NAMESPACE} {{
+    template <
+        typename T, typename U,
+        typename _E =
+            typename enable_if<_valid_compare_exchange_type<{address_space_name} T *>::value &&
+            is_convertible<T, U>::value>::type
+    >
+    METAL_FUNC {} atomic_{defined_func_key}_explicit(
+        volatile {address_space_name} _atomic<T> *object,
+        thread T *expected, U desired
+    ) {{
+        bool exchanged = {NAMESPACE}::{called_func_name}(
+            object,
+            expected, desired,
+            {NAMESPACE}::memory_order_relaxed,
+            {NAMESPACE}::memory_order_relaxed
+        );
+        return {}{{*expected, exchanged}};
+    }}
+}}",
+                            struct_name, struct_name
+                        )?;
+                    }
+                }
             }
         }
 
@@ -5967,9 +6038,7 @@ impl crate::AtomicFunction {
             Self::Min => "fetch_min",
             Self::Max => "fetch_max",
             Self::Exchange { compare: None } => "exchange",
-            Self::Exchange { compare: Some(_) } => Err(Error::FeatureNotImplemented(
-                "atomic CompareExchange".to_string(),
-            ))?,
+            Self::Exchange { compare: Some(_) } => ATOMIC_COMP_EXCH_WEAK_FUNCTION_KEY,
         })
     }
 
