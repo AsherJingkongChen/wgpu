@@ -3118,18 +3118,16 @@ impl<W: Write> Writer<W> {
                         "{NAMESPACE}::atomic_{fun_key}_explicit({ATOMIC_REFERENCE}"
                     )?;
                     self.put_access_chain(pointer, policy, context)?;
-                    write!(self.out, ", ")?;
-                    self.put_expression(value, context, true)?;
-                    write!(self.out, ", ")?;
 
                     // Put the extra value if provided.
                     if let crate::AtomicFunction::Exchange { compare: Some(cmp) } = *fun {
-                        write!(self.out, "{ATOMIC_REFERENCE}")?;
+                        write!(self.out, ", {ATOMIC_REFERENCE}")?;
                         self.put_expression(cmp, context, true)?;
-                        write!(self.out, ", ")?;
                     }
 
-                    write!(self.out, "{NAMESPACE}::memory_order_relaxed)")?;
+                    write!(self.out, ", ")?;
+                    self.put_expression(value, context, true)?;
+                    write!(self.out, ", {NAMESPACE}::memory_order_relaxed)")?;
 
                     // Finish the ternary expression.
                     if checked {
@@ -3764,46 +3762,66 @@ impl<W: Write> Writer<W> {
                         struct_name, struct_name
                     )?;
                 }
-                &crate::PredeclaredType::AtomicCompareExchangeWeakResult( .. ) => {
+                &crate::PredeclaredType::AtomicCompareExchangeWeakResult(
+                    crate::Scalar { kind, .. }
+                ) => {
+                    let arg_type_name = match kind {
+                        crate::ScalarKind::Sint => "int",
+                        crate::ScalarKind::Uint => "uint",
+                        crate::ScalarKind::Float => "float",
+                        crate::ScalarKind::Bool => "bool",
+                        crate::ScalarKind::AbstractInt | crate::ScalarKind::AbstractFloat => {
+                            return Err(Error::GenericValidation(format!(
+                                "Unsupported abstract type: {kind:?}"
+                            )))
+                        }
+                    };
+
                     let called_func_name = "__metal_atomic_compare_exchange_weak_explicit";
                     let defined_func_key = ATOMIC_COMP_EXCH_WEAK_FUNCTION_KEY;
                     let struct_name = &self.names[&NameKey::Type(*struct_ty)];
 
                     writeln!(self.out)?;
+                    writeln!(self.out, "namespace {NAMESPACE} {{")?;
 
                     for (address_space_name, memory_scope_name) in [
                         ("threadgroup", "THREADGROUP"), ("device", "DEVICE")
                     ] {
                         writeln!(
                             self.out,
-                            "namespace {NAMESPACE} {{
+                            "    \
     template <
-        typename T, typename U,
-        typename _E =
-            typename enable_if<_valid_compare_exchange_type<{address_space_name} T *>::value &&
-            is_convertible<T, U>::value>::type
+        typename _E = typename enable_if<
+            _valid_compare_exchange_type<{address_space_name} {arg_type_name} *>::value
+        >::type
     >
     METAL_FUNC {struct_name} atomic_{defined_func_key}_explicit(
-        volatile {address_space_name} _atomic<T> *object,
-        U desired, thread T *expected,
+        volatile {address_space_name} _atomic<{arg_type_name}> *object,
+        thread {arg_type_name} *expected,
+        {arg_type_name} desired,
         memory_order success
-    ) METAL_CONST_ARG(success)
-      METAL_COMPATIBLE_COMPARE_EXCHANGE_ORDERS(success, {NAMESPACE}::memory_order_relaxed)
+    )
+        METAL_CONST_ARG(success)
+        METAL_COMPATIBLE_COMPARE_EXCHANGE_ORDERS(success, {NAMESPACE}::memory_order_relaxed)
     {{
-        decltype(object->__s) next_expected(*expected);
+        {arg_type_name} next_expected(*expected);
         bool swapped = {called_func_name}(
             &object->__s,
             &next_expected,
-            decltype(object->__s)(desired),
+            desired,
             int(success),
             int({NAMESPACE}::memory_order_relaxed),
             __METAL_MEMORY_SCOPE_{memory_scope_name}__
         );
-        return {struct_name}{{*expected = T(next_expected), swapped}};
-    }}
-}}"
+        return {struct_name}{{
+            *expected = {arg_type_name}(next_expected),
+            swapped
+        }};
+    }}"
                         )?;
                     }
+
+                    writeln!(self.out, "}}")?;
                 }
             }
         }
