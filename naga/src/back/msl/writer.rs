@@ -3119,18 +3119,17 @@ impl<W: Write> Writer<W> {
                     )?;
                     self.put_access_chain(pointer, policy, context)?;
                     write!(self.out, ", ")?;
+                    self.put_expression(value, context, true)?;
+                    write!(self.out, ", ")?;
 
                     // Put the extra value if provided.
                     if let crate::AtomicFunction::Exchange { compare: Some(cmp) } = *fun {
                         write!(self.out, "{ATOMIC_REFERENCE}")?;
                         self.put_expression(cmp, context, true)?;
                         write!(self.out, ", ")?;
-                        self.put_expression(value, context, true)?;
-                        write!(self.out, ")")?;
-                    } else {
-                        self.put_expression(value, context, true)?;
-                        write!(self.out, ", {NAMESPACE}::memory_order_relaxed)")?;
                     }
+
+                    write!(self.out, "{NAMESPACE}::memory_order_relaxed)")?;
 
                     // Finish the ternary expression.
                     if checked {
@@ -3765,14 +3764,16 @@ impl<W: Write> Writer<W> {
                         struct_name, struct_name
                     )?;
                 }
-                &crate::PredeclaredType::AtomicCompareExchangeWeakResult(scalar) => {
-                    let called_func_name = "atomic_compare_exchange_weak_explicit";
+                &crate::PredeclaredType::AtomicCompareExchangeWeakResult( .. ) => {
+                    let called_func_name = "__metal_atomic_compare_exchange_weak_explicit";
                     let defined_func_key = ATOMIC_COMP_EXCH_WEAK_FUNCTION_KEY;
                     let struct_name = &self.names[&NameKey::Type(*struct_ty)];
 
                     writeln!(self.out)?;
 
-                    for address_space_name in ["device", "threadgroup"] {
+                    for (address_space_name, memory_scope_name) in [
+                        ("threadgroup", "THREADGROUP"), ("device", "DEVICE")
+                    ] {
                         writeln!(
                             self.out,
                             "namespace {NAMESPACE} {{
@@ -3782,20 +3783,25 @@ impl<W: Write> Writer<W> {
             typename enable_if<_valid_compare_exchange_type<{address_space_name} T *>::value &&
             is_convertible<T, U>::value>::type
     >
-    METAL_FUNC {} atomic_{defined_func_key}_explicit(
+    METAL_FUNC {struct_name} atomic_{defined_func_key}_explicit(
         volatile {address_space_name} _atomic<T> *object,
-        thread T *expected, U desired
-    ) {{
-        bool exchanged = {NAMESPACE}::{called_func_name}(
-            object,
-            expected, desired,
-            {NAMESPACE}::memory_order_relaxed,
-            {NAMESPACE}::memory_order_relaxed
+        U desired, thread T *expected,
+        memory_order success
+    ) METAL_CONST_ARG(success)
+      METAL_COMPATIBLE_COMPARE_EXCHANGE_ORDERS(success, {NAMESPACE}::memory_order_relaxed)
+    {{
+        decltype(object->__s) next_expected(*expected);
+        bool swapped = {called_func_name}(
+            &object->__s,
+            &next_expected,
+            decltype(object->__s)(desired),
+            int(success),
+            int({NAMESPACE}::memory_order_relaxed),
+            __METAL_MEMORY_SCOPE_{memory_scope_name}__
         );
-        return {}{{*expected, exchanged}};
+        return {struct_name}{{*expected = T(next_expected), swapped}};
     }}
-}}",
-                            struct_name, struct_name
+}}"
                         )?;
                     }
                 }
