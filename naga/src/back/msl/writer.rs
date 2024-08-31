@@ -3762,19 +3762,14 @@ impl<W: Write> Writer<W> {
                         struct_name, struct_name
                     )?;
                 }
-                &crate::PredeclaredType::AtomicCompareExchangeWeakResult(
-                    crate::Scalar { kind, .. }
-                ) => {
-                    let arg_type_name = match kind {
-                        crate::ScalarKind::Sint => "int",
-                        crate::ScalarKind::Uint => "uint",
-                        crate::ScalarKind::Float => "float",
-                        crate::ScalarKind::Bool => "bool",
-                        crate::ScalarKind::AbstractInt | crate::ScalarKind::AbstractFloat => {
-                            return Err(Error::GenericValidation(format!(
-                                "Unsupported abstract type: {kind:?}"
-                            )))
-                        }
+                &crate::PredeclaredType::AtomicCompareExchangeWeakResult(scalar) => {
+                    let crate::Scalar { kind, width } = scalar;
+                    let arg_type_name = match (kind, width) {
+                        (crate::ScalarKind::Sint, 4) => "int",
+                        (crate::ScalarKind::Uint, 4) => "uint",
+                        (crate::ScalarKind::Float, 4) => "float",
+                        (crate::ScalarKind::Bool, 1) => "bool",
+                        _ => return Err(Error::UnsupportedScalar(scalar)),
                     };
 
                     let called_func_name = "__metal_atomic_compare_exchange_weak_explicit";

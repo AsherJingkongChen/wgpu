@@ -779,7 +779,7 @@ fn convert_wgsl() {
         ),
         (
             "atomicCompareExchange-int64",
-            Targets::SPIRV | Targets::METAL | Targets::WGSL,
+            Targets::SPIRV | Targets::WGSL,
         ),
         ("pointers", Targets::SPIRV | Targets::WGSL),
         (
