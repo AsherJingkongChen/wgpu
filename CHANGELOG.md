@@ -47,6 +47,10 @@ Bottom level categories:
 
 - Added back implementations of PartialEq for more IR types. By @teoxoy in [#6045](https://github.com/gfx-rs/wgpu/pull/6045)
 
+#### Metal
+
+- Support 32-bit floating-point atomic operations in shaders. It requires Metal 3.0 or later with Apple 7, 8, 9 or Mac 2. By @AsherJingkongChen in [#6231](https://github.com/gfx-rs/wgpu/pull/6231).
+
 ### Bug Fixes
 
 #### General
