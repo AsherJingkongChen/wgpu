@@ -45,11 +45,17 @@ Bottom level categories:
 
 #### Naga
 
-- Added back implementations of PartialEq for more IR types. By @teoxoy in [#6045](https://github.com/gfx-rs/wgpu/pull/6045)
+- Support constant evaluation for `firstLeadingBit` and `firstTrailingBit` numeric built-ins in WGSL. Front-ends that translate to these built-ins also benefit from constant evaluation. By @ErichDonGubler in [#5101](https://github.com/gfx-rs/wgpu/pull/5101).
+- Add `first` and `either` sampling types for `@interpolate(flat, …)` in WGSL. By @ErichDonGubler in [#6181](https://github.com/gfx-rs/wgpu/pull/6181).
+
+#### Vulkan
+
+- Allow using [VK_GOOGLE_display_timing](https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VK_GOOGLE_display_timing.html) unsafely with the `VULKAN_GOOGLE_DISPLAY_TIMING` feature. By @DJMcNab in [#6149](https://github.com/gfx-rs/wgpu/pull/6149)
+- Support some 32-bit floating-point atomic operations in shaders. It requires the capability `AtomicFloat32AddEXT` with SPIR-V extension `SPV_EXT_shader_atomic_float_add` enabled. By @AsherJingkongChen in [#6234](https://github.com/gfx-rs/wgpu/pull/6234)
 
 #### Metal
 
-- Support 32-bit floating-point atomic operations in shaders. It requires Metal 3.0 or later with Apple 7, 8, 9 or Mac 2. By @AsherJingkongChen in [#6234](https://github.com/gfx-rs/wgpu/pull/6234).
+- Support some 32-bit floating-point atomic operations in shaders. It requires Metal 3.0 or later with Apple 7, 8, 9 or Mac 2. By @AsherJingkongChen in [#6234](https://github.com/gfx-rs/wgpu/pull/6234)
 
 ### Bug Fixes
 
