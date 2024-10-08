@@ -1934,7 +1934,7 @@ pub enum Statement {
         /// If [`SHADER_INT64_ATOMIC_MIN_MAX`] or [`SHADER_INT64_ATOMIC_ALL_OPS`] are
         /// enabled, this may also be [`I64`] or [`U64`].
         ///
-        /// If [`SHADER_FLT32_ATOMIC`] is enabled, this may be [`F32`].
+        /// If [`SHADER_FLT32_ATOMIC`] is enabled, this may be [`F32`](crate::Scalar::F32).
         ///
         /// [`Pointer`]: TypeInner::Pointer
         /// [`Atomic`]: TypeInner::Atomic
