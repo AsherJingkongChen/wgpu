@@ -288,6 +288,9 @@ impl super::Instance {
         // so that we don't have to conditionally use the functions provided by the 1.1 instance
         extensions.push(khr::get_physical_device_properties2::NAME);
 
+        // VK_EXT_shader_atomic_float
+        extensions.push(ext::shader_atomic_float::NAME);
+
         // Only keep available extensions.
         extensions.retain(|&ext| {
             if instance_extensions
