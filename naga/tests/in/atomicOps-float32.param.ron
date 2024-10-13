@@ -10,6 +10,12 @@
 		inline_samplers: [],
 		spirv_cross_compatibility: false,
 		fake_missing_bindings: true,
-		zero_initialize_workgroup_memory: false,
+		zero_initialize_workgroup_memory: true,
+	),
+	glsl: (
+		version: Desktop(460),
+		writer_flags: (""),
+		binding_map: { },
+		zero_initialize_workgroup_memory: true,
 	),
 )

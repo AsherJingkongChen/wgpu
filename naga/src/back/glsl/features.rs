@@ -52,6 +52,8 @@ bitflags::bitflags! {
         const TEXTURE_SHADOW_LOD = 1 << 23;
         /// Subgroup operations
         const SUBGROUP_OPERATIONS = 1 << 24;
+        /// Floating-point atomics
+        const FLOAT_ATOMIC = 1 << 25;
     }
 }
 
@@ -131,6 +133,7 @@ impl FeaturesManager {
         check_feature!(TEXTURE_LEVELS, 130);
         check_feature!(IMAGE_SIZE, 430, 310);
         check_feature!(TEXTURE_SHADOW_LOD, 200, 300);
+        check_feature!(FLOAT_ATOMIC, 460);
 
         // Return an error if there are missing features
         if missing.is_empty() {
@@ -228,7 +231,7 @@ impl FeaturesManager {
                 // https://www.khronos.org/registry/OpenGL/extensions/OVR/OVR_multiview2.txt
                 writeln!(out, "#extension GL_OVR_multiview2 : require")?;
             } else {
-                // https://github.com/KhronosGroup/GLSL/blob/master/extensions/ext/GL_EXT_multiview.txt
+                // https://raw.githubusercontent.com/KhronosGroup/GLSL/refs/heads/main/extensions/ext/GL_EXT_multiview.txt
                 writeln!(out, "#extension GL_EXT_multiview : require")?;
             }
         }
@@ -276,6 +279,11 @@ impl FeaturesManager {
                 out,
                 "#extension GL_KHR_shader_subgroup_shuffle_relative : require"
             )?;
+        }
+
+        if self.0.contains(Features::FLOAT_ATOMIC) {
+            // https://raw.githubusercontent.com/KhronosGroup/GLSL/refs/heads/main/extensions/ext/GLSL_EXT_shader_atomic_float.txt
+            writeln!(out, "#extension GL_EXT_shader_atomic_float : require")?;
         }
 
         Ok(())
@@ -409,6 +417,11 @@ impl<'a, W> Writer<'a, W> {
                         },
                         ImageClass::Sampled { multi: false, .. }
                         | ImageClass::Depth { multi: false } => {}
+                    }
+                }
+                TypeInner::Atomic(scalar) => {
+                    if let ScalarKind::Float = scalar.kind {
+                        self.features.request(Features::FLOAT_ATOMIC);
                     }
                 }
                 _ => {}
